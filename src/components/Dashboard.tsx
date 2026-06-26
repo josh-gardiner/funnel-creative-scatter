@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { ScatterData } from "@/lib/types";
 import { ScatterCard } from "@/components/ScatterCard";
 import { StatsBar } from "@/components/StatsBar";
@@ -5,10 +8,23 @@ import { fmtUSD } from "@/lib/viz";
 
 export function Dashboard({ data }: { data: ScatterData }) {
   const { account, totals, ads, campaigns } = data;
+  const [hideSmall, setHideSmall] = useState(false);
 
   return (
     <div className="space-y-8">
       <StatsBar totals={totals} />
+
+      <div className="flex items-center justify-end">
+        <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-[#9fb0cb]">
+          <input
+            type="checkbox"
+            checked={hideSmall}
+            onChange={(e) => setHideSmall(e.target.checked)}
+            className="h-3.5 w-3.5 accent-[#6c63ff]"
+          />
+          Hide ads under 1% of group spend
+        </label>
+      </div>
 
       {/* Level 1 — Account */}
       <div className="space-y-4">
@@ -22,6 +38,7 @@ export function Dashboard({ data }: { data: ScatterData }) {
           subtitle={fmtUSD(totals.spend)}
           ads={ads}
           spendPctField="accountSpendPct"
+          hideSmall={hideSmall}
         />
       </div>
 
@@ -38,6 +55,7 @@ export function Dashboard({ data }: { data: ScatterData }) {
             subtitle={fmtUSD(campaign.spend)}
             ads={campaign.ads}
             spendPctField="campaignSpendPct"
+            hideSmall={hideSmall}
           />
 
           <div className="space-y-4">
@@ -49,6 +67,7 @@ export function Dashboard({ data }: { data: ScatterData }) {
                 ads={adSet.ads}
                 spendPctField="adSetSpendPct"
                 indented
+                hideSmall={hideSmall}
               />
             ))}
           </div>

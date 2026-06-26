@@ -69,10 +69,16 @@ export interface ChartPoint extends AdPoint {
   funnel: FunnelLabel;
   color: string; // spend-share gradient colour
   radius: number; // dot radius scaled by absolute spend
+  belowThreshold: boolean; // < SMALL_SPEND_PCT of the group → not meaningful
 }
 
-const MIN_R = 5;
+// Ads contributing less than this share of their group's spend are treated as
+// "not meaningfully contributing": rendered hollow + shrunk, and toggleable off.
+export const SMALL_SPEND_PCT = 1;
+
+const MIN_R = 3;
 const MAX_R = 26;
+const SMALL_MAX_R = 6; // cap so tiny-spend dots stay visibly small
 
 /**
  * Decorate ads for a single chart: compute per-chart medians, funnel stage,
@@ -96,13 +102,16 @@ export function buildChartPoints(
     const groupPct = a[spendPctField];
     const t = maxPct > 0 ? groupPct / maxPct : 0;
     const spendRatio = maxSpend > 0 ? a.spend / maxSpend : 0;
+    const belowThreshold = groupPct < SMALL_SPEND_PCT;
+    // sqrt scale so dot *area* tracks spend; tiny-spend dots are capped smaller
+    const baseR = MIN_R + (MAX_R - MIN_R) * Math.sqrt(spendRatio);
     return {
       ...a,
       groupPct,
+      belowThreshold,
       funnel: funnelLabel(a.frequency, a.cpmUnique, medianFreq, medianCpm),
       color: spendColor(t),
-      // sqrt scale so dot *area* tracks spend
-      radius: MIN_R + (MAX_R - MIN_R) * Math.sqrt(spendRatio),
+      radius: belowThreshold ? Math.min(baseR, SMALL_MAX_R) : baseR,
     };
   });
 

@@ -27,6 +27,7 @@ interface ScatterCardProps {
   ads: AdPoint[];
   spendPctField: SpendPctField;
   indented?: boolean;
+  hideSmall?: boolean; // hide sub-1% ads entirely
 }
 
 function pad(min: number, max: number): [number, number] {
@@ -82,6 +83,20 @@ function QuadrantLabels(props: {
 function Dot(props: { cx?: number; cy?: number; payload?: ChartPoint }) {
   const { cx, cy, payload } = props;
   if (cx == null || cy == null || !payload) return null;
+  // Sub-1% ads render hollow (outline only) to signal they aren't meaningful.
+  if (payload.belowThreshold) {
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={payload.radius}
+        fill="none"
+        stroke={payload.color}
+        strokeWidth={1.75}
+        strokeOpacity={0.75}
+      />
+    );
+  }
   return (
     <circle
       cx={cx}
@@ -138,16 +153,22 @@ export function ScatterCard({
   ads,
   spendPctField,
   indented = false,
+  hideSmall = false,
 }: ScatterCardProps) {
+  // Medians (and thus funnel quadrants) are computed from all ads so the
+  // reference lines stay stable whether or not small ads are hidden.
   const { points, medianFreq, medianCpm } = buildChartPoints(
     ads,
     spendPctField
   );
 
-  const xs = points.map((p) => p.frequency);
-  const ys = points.map((p) => p.cpmUnique);
-  const xDomain = points.length ? pad(Math.min(...xs), Math.max(...xs)) : [0, 2];
-  const yDomain = points.length
+  const visible = hideSmall ? points.filter((p) => !p.belowThreshold) : points;
+  const hiddenCount = points.length - visible.length;
+
+  const xs = visible.map((p) => p.frequency);
+  const ys = visible.map((p) => p.cpmUnique);
+  const xDomain = visible.length ? pad(Math.min(...xs), Math.max(...xs)) : [0, 2];
+  const yDomain = visible.length
     ? pad(Math.min(...ys), Math.max(...ys))
     : [0, 50];
 
@@ -168,6 +189,10 @@ export function ScatterCard({
       {points.length === 0 ? (
         <div className="flex h-[220px] items-center justify-center text-sm text-[#7f8da6]">
           No spending ads in this group for the last 14 days.
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="flex h-[220px] items-center justify-center text-center text-sm text-[#7f8da6]">
+          All {points.length} ads here are under 1% of group spend — hidden.
         </div>
       ) : (
         <>
@@ -223,12 +248,22 @@ export function ScatterCard({
                   content={<CustomTooltip />}
                   cursor={{ stroke: "#3a4a66", strokeDasharray: "3 3" }}
                 />
-                <Scatter data={points} shape={<Dot />} isAnimationActive={false} />
+                <Scatter
+                  data={visible}
+                  shape={<Dot />}
+                  isAnimationActive={false}
+                />
                 <Customized component={QuadrantLabels} />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
-          <AdPills points={points} />
+          <AdPills points={visible} />
+          {hiddenCount > 0 && (
+            <p className="mt-2 text-xs text-[#5f6d85]">
+              {hiddenCount} ad{hiddenCount === 1 ? "" : "s"} under 1% of group
+              spend hidden.
+            </p>
+          )}
         </>
       )}
     </section>
