@@ -158,3 +158,53 @@ export async function fetchAdMetrics(
     { useAsOf: true }
   );
 }
+
+export type ReachEntityType = "account" | "campaign" | "ad_set" | "ad";
+
+export interface PdhReach {
+  reach: number;
+  frequency: number;
+  impressions: number;
+}
+
+/**
+ * Deduplicated reach/frequency over a date range from `/v1/metrics/reach`.
+ * This is a LIVE Meta call (one entity per request) — the only accurate source
+ * of multi-day frequency, since daily reach rows can't be summed across days.
+ * `entityId` is required unless `entityType` is "account".
+ */
+export async function fetchReach(
+  accountId: string,
+  entityType: ReachEntityType,
+  entityId: string | null,
+  dateFrom: string,
+  dateTo: string
+): Promise<PdhReach> {
+  const url = new URL(BASE_URL + "/v1/metrics/reach");
+  url.searchParams.set("account_id", accountId);
+  url.searchParams.set("platform", "meta");
+  url.searchParams.set("entity_type", entityType);
+  url.searchParams.set("date_from", dateFrom);
+  url.searchParams.set("date_to", dateTo);
+  if (entityId) url.searchParams.set("entity_id", entityId);
+
+  const res = await fetch(url.toString(), {
+    headers: { "X-API-Key": apiKey() },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `PDH /v1/metrics/reach failed: ${res.status} ${res.statusText}${
+        body ? ` — ${body.slice(0, 200)}` : ""
+      }`
+    );
+  }
+  const json = (await res.json()) as { data?: Record<string, unknown> };
+  const d = json.data ?? {};
+  return {
+    reach: Number(d.reach) || 0,
+    frequency: Number(d.frequency) || 0,
+    impressions: Number(d.impressions) || 0,
+  };
+}

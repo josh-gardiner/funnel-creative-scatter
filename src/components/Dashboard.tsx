@@ -4,17 +4,17 @@ import { useState } from "react";
 import type { ScatterData } from "@/lib/types";
 import { ScatterCard } from "@/components/ScatterCard";
 import { StatsBar } from "@/components/StatsBar";
+import { WindowToggle } from "@/components/WindowToggle";
 import { fmtUSD } from "@/lib/viz";
 
 export function Dashboard({ data }: { data: ScatterData }) {
-  const { account, totals, ads, campaigns } = data;
-  const [hideSmall, setHideSmall] = useState(false);
+  const { account, totals, ads, campaigns, window } = data;
+  const [hideSmall, setHideSmall] = useState(true);
 
   return (
     <div className="space-y-8">
-      <StatsBar totals={totals} />
-
-      <div className="flex items-center justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <WindowToggle active={window} />
         <label className="flex cursor-pointer select-none items-center gap-2 text-xs text-[#9fb0cb]">
           <input
             type="checkbox"
@@ -26,18 +26,23 @@ export function Dashboard({ data }: { data: ScatterData }) {
         </label>
       </div>
 
+      <StatsBar totals={totals} window={window} />
+
       {/* Level 1 — Account */}
       <div className="space-y-4">
         <SectionHeading
           kicker="Account"
           title={account.name}
-          note={`${ads.length} spending ads · colour = % of total account spend`}
+          note={`${ads.length} spending ads · colour = funnel stage · size = spend`}
         />
         <ScatterCard
           title="All ads"
           subtitle={fmtUSD(totals.spend)}
           ads={ads}
           spendPctField="accountSpendPct"
+          window={window}
+          trend={totals.trend}
+          funnelSpend={data.funnelSpend}
           hideSmall={hideSmall}
         />
       </div>
@@ -48,13 +53,16 @@ export function Dashboard({ data }: { data: ScatterData }) {
           <SectionHeading
             kicker="Campaign"
             title={campaign.name}
-            note={`${campaign.ads.length} ads · ${campaign.adSets.length} ad sets · colour = % of campaign spend`}
+            note={`${campaign.ads.length} ads · ${campaign.adSets.length} ad sets`}
           />
           <ScatterCard
             title={campaign.name}
             subtitle={fmtUSD(campaign.spend)}
             ads={campaign.ads}
             spendPctField="campaignSpendPct"
+            window={window}
+            trend={campaign.trend}
+            funnelSpend={campaign.funnelSpend}
             hideSmall={hideSmall}
           />
 
@@ -63,9 +71,12 @@ export function Dashboard({ data }: { data: ScatterData }) {
               <ScatterCard
                 key={adSet.id}
                 title={adSet.name}
-                subtitle={`${fmtUSD(adSet.spend)} · colour = % of ad set spend`}
+                subtitle={fmtUSD(adSet.spend)}
                 ads={adSet.ads}
                 spendPctField="adSetSpendPct"
+                window={window}
+                trend={adSet.trend}
+                funnelSpend={adSet.funnelSpend}
                 indented
                 hideSmall={hideSmall}
               />
@@ -75,8 +86,10 @@ export function Dashboard({ data }: { data: ScatterData }) {
       ))}
 
       <p className="pt-2 text-xs text-[#5f6d85]">
-        Reach is summed from daily-deduplicated values (approximate across
-        multi-day windows). Data window: {data.dateFrom} → {data.dateTo}.
+        Frequency & CPM-unique use live deduplicated reach (cached ~24h). Spend,
+        impressions & structure are from stored data. Funnel bands: TOF 1–2, MOF
+        2–5, BOF 5+. Trends compare to the previous {window}-day window (account
+        exact; per-chart directional). Window: {data.dateFrom} → {data.dateTo}.
       </p>
     </div>
   );
@@ -92,8 +105,8 @@ function SectionHeading({
   note: string;
 }) {
   return (
-    <div className="border-l-2 border-tof/60 pl-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-tof">
+    <div className="border-l-2 border-white/25 pl-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-[#9fb0cb]">
         {kicker}
       </div>
       <div className="text-base font-semibold text-white">{title}</div>

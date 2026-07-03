@@ -1,121 +1,118 @@
-// Pure visual helpers shared by chart components (safe on the client).
+// Pure visual + classification helpers (safe on both server and client).
 
-import type { AdPoint, FunnelLabel, SpendPctField } from "@/lib/types";
+import type {
+  AdPoint,
+  FunnelLabel,
+  FunnelSpend,
+  SpendPctField,
+  TrendDir,
+} from "@/lib/types";
 
-// Spend gradient stops from the brief: blue → teal → amber → red.
-const GRADIENT: Array<[number, [number, number, number]]> = [
-  [0.0, [74, 144, 255]], // #4a90ff
-  [0.34, [40, 217, 160]], // #28d9a0
-  [0.67, [245, 168, 32]], // #f5a820
-  [1.0, [255, 64, 96]], // #ff4060
-];
+// Funnel bands by per-creative frequency: TOF 1–2, MOF 2–5, BOF 5+.
+export const MOF_MIN = 2;
+export const BOF_MIN = 5;
+
+// Fixed frequency X-axis range. BOF (5+) ads are plotted inside a "5+" zone
+// so they don't pile up on the axis edge.
+export const X_MIN = 1;
+export const X_MAX = 5;
+export const X_PLOT_MAX = 5.5; // right edge of the plotted domain
+const BOF_PLOT_X = 5.25; // where 5+ ads sit (inside the 5–5.5 red zone)
 
 const FUNNEL_COLORS: Record<FunnelLabel, string> = {
-  TOF: "#4a90ff",
-  MOF: "#f5a820",
-  BOF: "#ff4060",
+  TOF: "#2ecc71", // green
+  MOF: "#f5c518", // yellow
+  BOF: "#ff4060", // red
 };
 
 export function funnelColor(label: FunnelLabel): string {
   return FUNNEL_COLORS[label];
 }
 
-/** Interpolate the spend gradient at t ∈ [0, 1]. */
-export function spendColor(t: number): string {
-  const x = Math.max(0, Math.min(1, t));
-  for (let i = 0; i < GRADIENT.length - 1; i++) {
-    const [t0, c0] = GRADIENT[i];
-    const [t1, c1] = GRADIENT[i + 1];
-    if (x >= t0 && x <= t1) {
-      const f = t1 === t0 ? 0 : (x - t0) / (t1 - t0);
-      const r = Math.round(c0[0] + (c1[0] - c0[0]) * f);
-      const g = Math.round(c0[1] + (c1[1] - c0[1]) * f);
-      const b = Math.round(c0[2] + (c1[2] - c0[2]) * f);
-      return `rgb(${r}, ${g}, ${b})`;
-    }
+/** Funnel stage from per-creative frequency. TOF <2, MOF 2–5, BOF ≥5. */
+export function funnelLabel(frequency: number): FunnelLabel {
+  if (frequency < MOF_MIN) return "TOF";
+  if (frequency < BOF_MIN) return "MOF";
+  return "BOF";
+}
+
+/** Spend split across funnel bands for a set of ads. */
+export function funnelSpend(ads: AdPoint[]): FunnelSpend {
+  let tofSpend = 0;
+  let mofSpend = 0;
+  let bofSpend = 0;
+  for (const a of ads) {
+    const stage = funnelLabel(a.frequency);
+    if (stage === "TOF") tofSpend += a.spend;
+    else if (stage === "MOF") mofSpend += a.spend;
+    else bofSpend += a.spend;
   }
-  return "rgb(255, 64, 96)";
+  const total = tofSpend + mofSpend + bofSpend;
+  const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
+  return {
+    tofSpend,
+    mofSpend,
+    bofSpend,
+    total,
+    tofPct: pct(tofSpend),
+    mofPct: pct(mofSpend),
+    bofPct: pct(bofSpend),
+  };
 }
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
-}
-
-/**
- * Funnel stage relative to this chart's own medians.
- *  TOF = below-median frequency AND below-median CPM
- *  BOF = above-median frequency AND above-median CPM
- *  MOF = everything else
- */
-export function funnelLabel(
-  frequency: number,
-  cpmUnique: number,
-  medianFreq: number,
-  medianCpm: number
-): FunnelLabel {
-  if (frequency <= medianFreq && cpmUnique <= medianCpm) return "TOF";
-  if (frequency > medianFreq && cpmUnique > medianCpm) return "BOF";
-  return "MOF";
+/** Direction of change vs. the previous period, with a flat deadband. */
+export function trendDir(now: number, prev: number, deadband = 0.03): TrendDir {
+  if (!Number.isFinite(now) || !Number.isFinite(prev)) return "flat";
+  if (prev <= 0) return now > 0 ? "up" : "flat";
+  const change = (now - prev) / prev;
+  if (Math.abs(change) < deadband) return "flat";
+  return change > 0 ? "up" : "down";
 }
 
 /** A point decorated with everything the chart needs to render it. */
 export interface ChartPoint extends AdPoint {
-  groupPct: number; // the spend% for the active grouping level
+  groupPct: number; // spend% within the active grouping level
   funnel: FunnelLabel;
-  color: string; // spend-share gradient colour
+  color: string; // funnel-band colour
   radius: number; // dot radius scaled by absolute spend
-  belowThreshold: boolean; // < SMALL_SPEND_PCT of the group → not meaningful
+  belowThreshold: boolean; // < SMALL_SPEND_PCT of the group → hollow / hideable
+  xClamped: number; // frequency clamped into [X_MIN, X_MAX] for plotting
 }
 
 // Ads contributing less than this share of their group's spend are treated as
-// "not meaningfully contributing": rendered hollow + shrunk, and toggleable off.
+// "not meaningfully contributing": rendered hollow, and hidden by default.
 export const SMALL_SPEND_PCT = 1;
 
 const MIN_R = 3;
 const MAX_R = 26;
 const SMALL_MAX_R = 6; // cap so tiny-spend dots stay visibly small
 
-/**
- * Decorate ads for a single chart: compute per-chart medians, funnel stage,
- * spend-share colour (relative to the chart's max share), and dot size
- * (relative to the chart's max spend).
- */
+/** Decorate ads for a single chart: funnel band, colour, spend-scaled size. */
 export function buildChartPoints(
   ads: AdPoint[],
   spendPctField: SpendPctField
-): {
-  points: ChartPoint[];
-  medianFreq: number;
-  medianCpm: number;
-} {
-  const medianFreq = median(ads.map((a) => a.frequency));
-  const medianCpm = median(ads.map((a) => a.cpmUnique));
-  const maxPct = Math.max(0, ...ads.map((a) => a[spendPctField]));
+): ChartPoint[] {
   const maxSpend = Math.max(0, ...ads.map((a) => a.spend));
 
-  const points = ads.map((a) => {
+  return ads.map((a) => {
     const groupPct = a[spendPctField];
-    const t = maxPct > 0 ? groupPct / maxPct : 0;
-    const spendRatio = maxSpend > 0 ? a.spend / maxSpend : 0;
     const belowThreshold = groupPct < SMALL_SPEND_PCT;
-    // sqrt scale so dot *area* tracks spend; tiny-spend dots are capped smaller
+    const spendRatio = maxSpend > 0 ? a.spend / maxSpend : 0;
     const baseR = MIN_R + (MAX_R - MIN_R) * Math.sqrt(spendRatio);
+    const funnel = funnelLabel(a.frequency);
     return {
       ...a,
       groupPct,
       belowThreshold,
-      funnel: funnelLabel(a.frequency, a.cpmUnique, medianFreq, medianCpm),
-      color: spendColor(t),
+      funnel,
+      color: funnelColor(funnel),
       radius: belowThreshold ? Math.min(baseR, SMALL_MAX_R) : baseR,
+      xClamped:
+        a.frequency >= BOF_MIN
+          ? BOF_PLOT_X
+          : Math.min(Math.max(a.frequency, X_MIN), X_MAX),
     };
   });
-
-  return { points, medianFreq, medianCpm };
 }
 
 export function fmtUSD(n: number, digits = 0): string {

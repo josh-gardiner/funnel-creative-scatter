@@ -2,7 +2,7 @@
 
 import {
   CartesianGrid,
-  Customized,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -11,23 +11,30 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AdPoint, SpendPctField } from "@/lib/types";
+import type { AdPoint, FunnelSpend, SpendPctField, Trend } from "@/lib/types";
 import {
   buildChartPoints,
   ChartPoint,
   fmtNum,
   fmtUSD,
   funnelColor,
+  X_MIN,
+  X_PLOT_MAX,
 } from "@/lib/viz";
 import { AdPills } from "@/components/AdPills";
+import { TrendBadge } from "@/components/TrendBadge";
+import { FunnelSpendBar } from "@/components/FunnelSpendBar";
 
 interface ScatterCardProps {
   title: string;
   subtitle?: string;
   ads: AdPoint[];
   spendPctField: SpendPctField;
+  window: number;
+  trend?: Trend;
+  funnelSpend?: FunnelSpend;
   indented?: boolean;
-  hideSmall?: boolean; // hide sub-1% ads entirely
+  hideSmall?: boolean;
 }
 
 function pad(min: number, max: number): [number, number] {
@@ -37,47 +44,6 @@ function pad(min: number, max: number): [number, number] {
   }
   const margin = (max - min) * 0.12;
   return [Math.max(0, min - margin), max + margin];
-}
-
-// Fixed corner labels: TOF = low freq/low CPM (bottom-left),
-// BOF = high freq/high CPM (top-right), MOF = the off-diagonal quadrants.
-function QuadrantLabels(props: {
-  xAxisMap?: Record<string, { x: number; width: number }>;
-  yAxisMap?: Record<string, { y: number; height: number }>;
-}) {
-  const x = props.xAxisMap && Object.values(props.xAxisMap)[0];
-  const y = props.yAxisMap && Object.values(props.yAxisMap)[0];
-  if (!x || !y) return null;
-  const left = x.x;
-  const right = x.x + x.width;
-  const top = y.y;
-  const bottom = y.y + y.height;
-  const style = { fontSize: 11, fontWeight: 700, opacity: 0.55 } as const;
-  return (
-    <g pointerEvents="none">
-      <text x={left + 8} y={bottom - 8} fill={funnelColor("TOF")} style={style}>
-        TOF
-      </text>
-      <text
-        x={right - 8}
-        y={top + 16}
-        textAnchor="end"
-        fill={funnelColor("BOF")}
-        style={style}
-      >
-        BOF
-      </text>
-      <text
-        x={right - 8}
-        y={bottom - 8}
-        textAnchor="end"
-        fill={funnelColor("MOF")}
-        style={style}
-      >
-        MOF
-      </text>
-    </g>
-  );
 }
 
 function Dot(props: { cx?: number; cy?: number; payload?: ChartPoint }) {
@@ -93,7 +59,7 @@ function Dot(props: { cx?: number; cy?: number; payload?: ChartPoint }) {
         fill="none"
         stroke={payload.color}
         strokeWidth={1.75}
-        strokeOpacity={0.75}
+        strokeOpacity={0.8}
       />
     );
   }
@@ -152,22 +118,17 @@ export function ScatterCard({
   subtitle,
   ads,
   spendPctField,
+  window,
+  trend,
+  funnelSpend,
   indented = false,
   hideSmall = false,
 }: ScatterCardProps) {
-  // Medians (and thus funnel quadrants) are computed from all ads so the
-  // reference lines stay stable whether or not small ads are hidden.
-  const { points, medianFreq, medianCpm } = buildChartPoints(
-    ads,
-    spendPctField
-  );
-
+  const points = buildChartPoints(ads, spendPctField);
   const visible = hideSmall ? points.filter((p) => !p.belowThreshold) : points;
   const hiddenCount = points.length - visible.length;
 
-  const xs = visible.map((p) => p.frequency);
   const ys = visible.map((p) => p.cpmUnique);
-  const xDomain = visible.length ? pad(Math.min(...xs), Math.max(...xs)) : [0, 2];
   const yDomain = visible.length
     ? pad(Math.min(...ys), Math.max(...ys))
     : [0, 50];
@@ -176,19 +137,26 @@ export function ScatterCard({
     <section
       className={[
         "rounded-xl border border-border bg-card p-4",
-        indented ? "ml-3 border-l-2 border-l-tof/40 sm:ml-6" : "",
+        indented ? "ml-3 border-l-2 border-l-white/15 sm:ml-6" : "",
       ].join(" ")}
     >
-      <div className="mb-3 flex items-baseline justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3 className="truncate text-sm font-semibold text-white">{title}</h3>
         {subtitle && (
           <span className="shrink-0 text-xs text-[#7f8da6]">{subtitle}</span>
         )}
+        {trend && (
+          <div className="w-full sm:w-auto">
+            <TrendBadge trend={trend} window={window} />
+          </div>
+        )}
       </div>
+
+      {funnelSpend && <FunnelSpendBar funnel={funnelSpend} />}
 
       {points.length === 0 ? (
         <div className="flex h-[220px] items-center justify-center text-sm text-[#7f8da6]">
-          No spending ads in this group for the last 14 days.
+          No spending ads in this group for the last {window} days.
         </div>
       ) : visible.length === 0 ? (
         <div className="flex h-[220px] items-center justify-center text-center text-sm text-[#7f8da6]">
@@ -198,17 +166,59 @@ export function ScatterCard({
         <>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart
-                margin={{ top: 12, right: 18, bottom: 28, left: 8 }}
-              >
+              <ScatterChart margin={{ top: 16, right: 18, bottom: 28, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
+                {/* Funnel band shading */}
+                <ReferenceArea
+                  x1={X_MIN}
+                  x2={2}
+                  fill={funnelColor("TOF")}
+                  fillOpacity={0.06}
+                  label={{
+                    value: "TOF",
+                    position: "insideTopLeft",
+                    fill: funnelColor("TOF"),
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                />
+                <ReferenceArea
+                  x1={2}
+                  x2={5}
+                  fill={funnelColor("MOF")}
+                  fillOpacity={0.06}
+                  label={{
+                    value: "MOF",
+                    position: "insideTop",
+                    fill: funnelColor("MOF"),
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                />
+                <ReferenceArea
+                  x1={5}
+                  x2={X_PLOT_MAX}
+                  fill={funnelColor("BOF")}
+                  fillOpacity={0.08}
+                  label={{
+                    value: "5+",
+                    position: "insideTopRight",
+                    fill: funnelColor("BOF"),
+                    fontSize: 11,
+                    fontWeight: 700,
+                  }}
+                />
+                <ReferenceLine x={2} stroke="#3a4a66" strokeDasharray="4 4" />
+                <ReferenceLine x={5} stroke="#3a4a66" strokeDasharray="4 4" />
                 <XAxis
                   type="number"
-                  dataKey="frequency"
+                  dataKey="xClamped"
                   name="Frequency"
-                  domain={xDomain}
+                  domain={[X_MIN, X_PLOT_MAX]}
+                  ticks={[1, 2, 3, 4, 5]}
+                  allowDataOverflow
                   tick={{ fill: "#7f8da6", fontSize: 11 }}
-                  tickFormatter={(v: number) => fmtNum(v, 1)}
+                  tickFormatter={(v: number) => (v >= 5 ? "5+" : String(v))}
                   label={{
                     value: "Frequency",
                     position: "insideBottom",
@@ -234,16 +244,6 @@ export function ScatterCard({
                     style: { textAnchor: "middle" },
                   }}
                 />
-                <ReferenceLine
-                  x={medianFreq}
-                  stroke="#3a4a66"
-                  strokeDasharray="5 5"
-                />
-                <ReferenceLine
-                  y={medianCpm}
-                  stroke="#3a4a66"
-                  strokeDasharray="5 5"
-                />
                 <Tooltip
                   content={<CustomTooltip />}
                   cursor={{ stroke: "#3a4a66", strokeDasharray: "3 3" }}
@@ -253,7 +253,6 @@ export function ScatterCard({
                   shape={<Dot />}
                   isAnimationActive={false}
                 />
-                <Customized component={QuadrantLabels} />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
