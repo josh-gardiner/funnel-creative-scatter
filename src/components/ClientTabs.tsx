@@ -12,7 +12,7 @@ export function ClientTabs({ activeSlug }: { activeSlug: string }) {
           <Link
             key={c.slug}
             href={`/clients/${c.slug}`}
-            prefetch
+            prefetch={false}
             aria-current={active ? "page" : undefined}
             className={[
               "rounded-lg px-4 py-2 text-sm font-medium transition-colors",

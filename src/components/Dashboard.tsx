@@ -10,6 +10,16 @@ import { fmtUSD } from "@/lib/viz";
 export function Dashboard({ data }: { data: ScatterData }) {
   const { account, totals, ads, campaigns, window } = data;
   const [hideSmall, setHideSmall] = useState(true);
+  // Ad-set charts are collapsed by default so a large account renders ~7 charts
+  // instead of ~17 — mounting all of them at once is what freezes the tab.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleCampaign = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <div className="space-y-8">
@@ -66,22 +76,39 @@ export function Dashboard({ data }: { data: ScatterData }) {
             hideSmall={hideSmall}
           />
 
-          <div className="space-y-4">
-            {campaign.adSets.map((adSet) => (
-              <ScatterCard
-                key={adSet.id}
-                title={adSet.name}
-                subtitle={fmtUSD(adSet.spend)}
-                ads={adSet.ads}
-                spendPctField="adSetSpendPct"
-                window={window}
-                trend={adSet.trend}
-                funnelSpend={adSet.funnelSpend}
-                indented
-                hideSmall={hideSmall}
-              />
-            ))}
-          </div>
+          {campaign.adSets.length > 0 && (
+            <div className="ml-3 sm:ml-6">
+              <button
+                type="button"
+                onClick={() => toggleCampaign(campaign.id)}
+                aria-expanded={expanded.has(campaign.id)}
+                className="text-xs font-medium text-[#8fa0bd] hover:text-white"
+              >
+                {expanded.has(campaign.id) ? "▾ Hide" : "▸ Show"}{" "}
+                {campaign.adSets.length} ad set
+                {campaign.adSets.length === 1 ? "" : "s"}
+              </button>
+
+              {expanded.has(campaign.id) && (
+                <div className="mt-4 space-y-4">
+                  {campaign.adSets.map((adSet) => (
+                    <ScatterCard
+                      key={adSet.id}
+                      title={adSet.name}
+                      subtitle={fmtUSD(adSet.spend)}
+                      ads={adSet.ads}
+                      spendPctField="adSetSpendPct"
+                      window={window}
+                      trend={adSet.trend}
+                      funnelSpend={adSet.funnelSpend}
+                      indented
+                      hideSmall={hideSmall}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ))}
 

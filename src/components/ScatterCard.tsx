@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import {
   CartesianGrid,
   ReferenceArea,
@@ -113,7 +114,7 @@ function CustomTooltip({
   );
 }
 
-export function ScatterCard({
+function ScatterCardBase({
   title,
   subtitle,
   ads,
@@ -268,3 +269,7 @@ export function ScatterCard({
     </section>
   );
 }
+
+// Memoized so toggling one campaign's ad sets (or Hide <1%) doesn't re-render
+// every other chart — key to keeping large accounts responsive.
+export const ScatterCard = memo(ScatterCardBase);
