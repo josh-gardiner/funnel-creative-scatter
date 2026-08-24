@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#20272B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Head to Head</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div class="app">
+  <div class="masthead">
+    <p class="eyebrow">Head to head</p>
+    <div class="plate">
+      <span class="plate-label">Game</span>
+      <span class="plate-num" id="gameNum">1</span>
+    </div>
+    <p class="plate-sub" id="plateSub">Up next</p>
+  </div>
+
+  <div class="fields">
+    <section class="side a">
+      <input class="name" id="nameA" value="Player 1" maxlength="14" aria-label="Left player name" autocomplete="off" spellcheck="false">
+      <div class="tally-score" id="scoreA">0</div>
+      <div class="steppers">
+        <button class="step minus" data-side="0" data-delta="-1" aria-label="Remove a win from left player">−</button>
+        <button class="step plus" data-side="0" data-delta="1" aria-label="Add a win to left player">+</button>
+      </div>
+      <div class="last" id="lastA"></div>
+    </section>
+    <section class="side b">
+      <input class="name" id="nameB" value="Player 2" maxlength="14" aria-label="Right player name" autocomplete="off" spellcheck="false">
+      <div class="tally-score" id="scoreB">0</div>
+      <div class="steppers">
+        <button class="step minus" data-side="1" data-delta="-1" aria-label="Remove a win from right player">−</button>
+        <button class="step plus" data-side="1" data-delta="1" aria-label="Add a win to right player">+</button>
+      </div>
+      <div class="last" id="lastB"></div>
+    </section>
+  </div>
+
+  <div class="strokes-wrap">
+    <div class="strokes-head"><span>Series order</span><span id="strokeCount"></span></div>
+    <div class="strokes" id="strokes"></div>
+  </div>
+
+  <div class="log">
+    <div class="log-head">
+      <h2>Daily log</h2>
+      <button class="undo" id="undoBtn" disabled>Undo last</button>
+    </div>
+    <div id="logBody"></div>
+  </div>
+
+  <footer>
+    <div class="tools">
+      <button class="tool" id="exportCsv">Export CSV</button>
+      <button class="tool" id="backup">Backup / restore</button>
+      <button class="tool danger" id="resetBtn">Reset series</button>
+    </div>
+    <p class="hint" id="syncHint">Connecting…</p>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<dialog id="dumpDlg">
+  <h3 id="dumpTitle">Backup</h3>
+  <textarea id="dumpText" spellcheck="false"></textarea>
+  <div class="tools">
+    <button class="tool" id="dumpCopy">Copy</button>
+    <button class="tool" id="dumpLoad">Restore from text</button>
+    <button class="tool" id="dumpClose">Close</button>
+  </div>
+</dialog>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
